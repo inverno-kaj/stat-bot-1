@@ -9,6 +9,10 @@ from telegram.ext import Application, CommandHandler, MessageHandler, ContextTyp
 DB_PATH = os.getenv("DB_PATH", "stats.db")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
+db_dir = os.path.dirname(DB_PATH)
+if db_dir:
+    os.makedirs(db_dir, exist_ok=True)
+
 # Для України/Києва. Якщо сервер в іншій TZ — статистика все одно буде по UTC+3.
 LOCAL_TZ = timezone(timedelta(hours=3))
 
