@@ -7,7 +7,7 @@ from telegram.constants import ParseMode
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 
 DB_PATH = os.getenv("DB_PATH", "stats.db")
-BOT_TOKEN="8169422166:AAGR0mZN1UyfNnfwC74RztV_NVNxkf2rcJg"
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 # Для України/Києва. Якщо сервер в іншій TZ — статистика все одно буде по UTC+3.
 LOCAL_TZ = timezone(timedelta(hours=3))
