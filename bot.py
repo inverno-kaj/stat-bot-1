@@ -218,7 +218,7 @@ async def me(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 ADMINS = {
     123456789,
-    951531976,
+    951531976
 }
 
 async def backup_db(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
