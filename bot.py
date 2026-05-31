@@ -1,10 +1,12 @@
 import os
 import sqlite3
+import shutil
 from datetime import datetime, timezone, timedelta
 from html import escape
 from telegram import Update, InputFile
 from telegram.constants import ParseMode
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
+from datetime import datetime
 
 DB_PATH = os.getenv("DB_PATH", "stats.db")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -214,24 +216,51 @@ async def me(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.effective_message.reply_html(text)
 
 
-ADMIN_ID = 781632572  # твій Telegram ID
+ADMINS = {
+    123456789,
+    951531976,
+}
 
 async def backup_db(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
+    chat = update.effective_chat
 
-    if not user or user.id != ADMIN_ID:
-        await update.effective_message.reply_text("⛔ У вас немає доступу до цієї команди.")
+    # Тільки в особистих повідомленнях
+    if chat.type != "private":
+        return
+
+    # Тільки для адміністраторів
+    if not user or user.id not in ADMINS:
+        await update.effective_message.reply_text(
+            "⛔ У вас немає доступу до цієї команди."
+        )
         return
 
     if not os.path.exists(DB_PATH):
-        await update.effective_message.reply_text("Файл бази не знайдено.")
+        await update.effective_message.reply_text(
+            "❌ Файл бази не знайдено."
+        )
         return
 
-    await update.effective_message.reply_document(
-        document=open(DB_PATH, "rb"),
-        filename="stats.db",
-        caption=f"📦 Резервна копія бази\nРозмір: {os.path.getsize(DB_PATH)} байт"
-    )
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    backup_path = f"backup_stats_{timestamp}.db"
+
+    shutil.copy2(DB_PATH, backup_path)
+
+    try:
+        with open(backup_path, "rb") as file:
+            await update.effective_message.reply_document(
+                document=file,
+                filename=f"stats_backup_{timestamp}.db",
+                caption=(
+                    f"📦 Резервна копія бази\n"
+                    f"Розмір: {os.path.getsize(DB_PATH)} байт"
+                )
+            )
+    finally:
+        if os.path.exists(backup_path):
+            os.remove(backup_path)
+            
 def main() -> None:
     if not BOT_TOKEN:
         raise RuntimeError("Не знайдено BOT_TOKEN. Додай токен у .env або змінну середовища BOT_TOKEN.")
