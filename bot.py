@@ -216,18 +216,13 @@ async def me(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 ADMIN_ID = 781632572  # твій Telegram ID
 
-async def backup_db(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.effective_user.id != ADMIN_ID:
-        return
 
-    if not os.path.exists(DB_PATH):
-        await update.effective_message.reply_text("Файл бази ще не знайдено.")
-        return
-
-    await update.effective_message.reply_document(
-        document=InputFile(DB_PATH),
-        filename="stats.db",
-        caption="Поточна база статистики"
+async def backup_db(update, context):
+    await update.message.reply_text(
+        f"DB_PATH={DB_PATH}\n"
+        f"ABS={os.path.abspath(DB_PATH)}\n"
+        f"EXISTS={os.path.exists(DB_PATH)}\n"
+        f"SIZE={os.path.getsize(DB_PATH) if os.path.exists(DB_PATH) else 0}"
     )
 
 def main() -> None:
