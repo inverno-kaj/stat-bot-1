@@ -217,7 +217,7 @@ async def me(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 ADMINS = {
-    123456789,
+    781632572,
     951531976
 }
 
