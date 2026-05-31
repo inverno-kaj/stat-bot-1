@@ -8,7 +8,7 @@ from telegram.constants import ParseMode
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 from datetime import datetime
 
-DB_PATH = os.getenv("DB_PATH", "stats.db")
+DB_PATH = os.getenv("DB_PATH")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 db_dir = os.path.dirname(DB_PATH)
