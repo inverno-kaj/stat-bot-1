@@ -216,15 +216,22 @@ async def me(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 ADMIN_ID = 781632572  # твій Telegram ID
 
+async def backup_db(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user = update.effective_user
 
-async def backup_db(update, context):
-    await update.message.reply_text(
-        f"DB_PATH={DB_PATH}\n"
-        f"ABS={os.path.abspath(DB_PATH)}\n"
-        f"EXISTS={os.path.exists(DB_PATH)}\n"
-        f"SIZE={os.path.getsize(DB_PATH) if os.path.exists(DB_PATH) else 0}"
+    if not user or user.id != ADMIN_ID:
+        await update.effective_message.reply_text("⛔ У вас немає доступу до цієї команди.")
+        return
+
+    if not os.path.exists(DB_PATH):
+        await update.effective_message.reply_text("Файл бази не знайдено.")
+        return
+
+    await update.effective_message.reply_document(
+        document=open(DB_PATH, "rb"),
+        filename="stats.db",
+        caption=f"📦 Резервна копія бази\nРозмір: {os.path.getsize(DB_PATH)} байт"
     )
-
 def main() -> None:
     if not BOT_TOKEN:
         raise RuntimeError("Не знайдено BOT_TOKEN. Додай токен у .env або змінну середовища BOT_TOKEN.")
