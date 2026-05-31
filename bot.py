@@ -2,7 +2,7 @@ import os
 import sqlite3
 from datetime import datetime, timezone, timedelta
 from html import escape
-from telegram import Update
+from telegram import Update, InputFile
 from telegram.constants import ParseMode
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 
@@ -214,6 +214,22 @@ async def me(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.effective_message.reply_html(text)
 
 
+ADMIN_ID = 781632572  # твій Telegram ID
+
+async def backup_db(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if update.effective_user.id != ADMIN_ID:
+        return
+
+    if not os.path.exists(DB_PATH):
+        await update.effective_message.reply_text("Файл бази ще не знайдено.")
+        return
+
+    await update.effective_message.reply_document(
+        document=InputFile(DB_PATH),
+        filename="stats.db",
+        caption="Поточна база статистики"
+    )
+
 def main() -> None:
     if not BOT_TOKEN:
         raise RuntimeError("Не знайдено BOT_TOKEN. Додай токен у .env або змінну середовища BOT_TOKEN.")
@@ -224,6 +240,7 @@ def main() -> None:
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_cmd))
     app.add_handler(CommandHandler("me", me))
+    app.add_handler(CommandHandler("backup_db", backup_db))
 
     app.add_handler(CommandHandler("top_day", lambda u, c: top_cmd(u, c, "day")))
     app.add_handler(CommandHandler("top_week", lambda u, c: top_cmd(u, c, "week")))
