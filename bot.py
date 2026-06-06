@@ -319,6 +319,48 @@ def row_user_key(row):
     return normalize_name(row[1] if len(row) > 1 else "")
 
 
+def get_worksheet(name):
+    creds_json = os.getenv("GOOGLE_CREDENTIALS_JSON")
+    if not creds_json:
+        raise RuntimeError("Не знайдено GOOGLE_CREDENTIALS_JSON")
+
+    creds_dict = json.loads(creds_json)
+
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive",
+    ]
+
+    creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+    client = gspread.authorize(creds)
+
+    return client.open_by_key(SPREADSHEET_ID).worksheet(name)
+
+
+def normalize_text(value):
+    return str(value or "").strip().lower()
+
+
+def get_week_count_for_user(chat_id, user_id, thread_ids):
+    start = period_start("week")
+    placeholders = ",".join("?" for _ in thread_ids)
+
+    with db() as conn:
+        row = conn.execute(
+            f"""
+            SELECT COUNT(*) AS count
+            FROM messages
+            WHERE chat_id = ?
+              AND user_id = ?
+              AND thread_id IN ({placeholders})
+              AND created_at >= ?
+            """,
+            [chat_id, int(user_id), *thread_ids, start]
+        ).fetchone()
+
+    return row["count"] if row else 0
+
+
 async def clean_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     msg = update.effective_message
 
@@ -327,58 +369,90 @@ async def clean_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
     chat = update.effective_chat
     user = update.effective_user
-
     cleaner = f"@{user.username}" if user and user.username else user.full_name
 
-    rows = build_top(chat.id, None, "week")
+    registry_sheet = get_worksheet("Реєстр чистки")
+    members_sheet = get_worksheet("Список учасників")
+    branches_sheet = get_worksheet("Список гілок")
 
-    stats = {}
-    for row in rows:
-        keys = [
-            normalize_name(row["username"]),
-            normalize_name(row["first_name"]),
-            normalize_name(f"{row['first_name'] or ''} {row['last_name'] or ''}"),
-        ]
+    registry_values = registry_sheet.get_all_values()
+    members_values = members_sheet.get_all_values()
+    branches_values = branches_sheet.get_all_values()
 
-        for key in keys:
-            if key:
-                stats[key] = row["count"]
+    # Список гілок: A = Код, B = Номер
+    branches = {}
+    for row in branches_values[2:]:
+        if len(row) >= 2 and row[0] and row[1]:
+            branches[str(row[0]).strip()] = int(row[1])
 
-    sheet = get_sheet()
+    game_thread = branches["Ігрова"]
+    general_thread = branches["Заг зібрання"]
 
-    values = sheet.get_all_values()
-    headers = values[0]
+    # Список учасників:
+    # B = Фандом, C = Персонаж, D = ID
+    members = {}
+    for row in members_values[1:]:
+        if len(row) < 4:
+            continue
+
+        fandom = str(row[1]).strip()
+        character = str(row[2]).strip()
+        user_id = str(row[3]).strip()
+
+        if not fandom or not character or not user_id:
+            continue
+
+        if fandom == "N/A":
+            continue
+
+        key = (normalize_text(fandom), normalize_text(character))
+        members[key] = user_id
 
     sunday = current_sunday()
     sunday_text = sunday.strftime("%d.%m.%Y")
 
+    headers = registry_values[0]
     date_col = None
 
     for i in range(2, len(headers), 2):  # C, E, G...
-        if headers[i] == sunday_text:
+        if str(headers[i]).strip() == sunday_text:
             date_col = i + 1
             break
 
     if date_col is None:
         date_col = len(headers) + 1
-        sheet.update_cell(1, date_col, sunday_text)
-        sheet.update_cell(1, date_col + 1, "Хто проводив")
+        registry_sheet.update_cell(1, date_col, sunday_text)
+        registry_sheet.update_cell(1, date_col + 1, "Хто проводив")
 
     updates = []
+    skipped = 0
+    filled = 0
 
-    for row_index, row in enumerate(values[1:], start=2):
-        name_key = row_user_key(row)
+    # Реєстр чистки: A = код, B = персонаж
+    for row_index, row in enumerate(registry_values[1:], start=2):
+        code = str(row[0]).strip() if len(row) > 0 else ""
+        character = str(row[1]).strip() if len(row) > 1 else ""
 
-        # B = N/A — пропускаємо
-        if name_key == "n/a":
+        if not code or not character:
             continue
 
-        # N не 0 — пропускаємо
-        n_value = row[13] if len(row) > 13 else ""
-        if str(n_value).strip() not in ("", "0"):
+        if code == "N/A":
+            skipped += 1
             continue
 
-        count = stats.get(name_key, 0)
+        member_key = (normalize_text(code), normalize_text(character))
+        user_id = members.get(member_key)
+
+        if not user_id:
+            skipped += 1
+            continue
+
+        if code in branches:
+            thread_ids = [branches[code], game_thread]
+        else:
+            thread_ids = [game_thread, general_thread]
+
+        count = get_week_count_for_user(chat.id, user_id, thread_ids)
 
         updates.append({
             "range": gspread.utils.rowcol_to_a1(row_index, date_col),
@@ -390,11 +464,15 @@ async def clean_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             "values": [[cleaner]],
         })
 
+        filled += 1
+
     if updates:
-        sheet.batch_update(updates)
+        registry_sheet.batch_update(updates)
 
     await msg.reply_text(
-        f"✅ Чистку внесено в таблицю за {sunday_text}\n"
+        f"✅ Чистку внесено за {sunday_text}\n"
+        f"Заповнено: {filled}\n"
+        f"Пропущено: {skipped}\n"
         f"Провів: {cleaner}"
     )
 
