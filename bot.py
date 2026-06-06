@@ -476,6 +476,11 @@ async def clean_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         f"Провів: {cleaner}"
     )
 
+async def thread_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.effective_message.reply_text(
+        f"Thread ID: {get_thread_id(update)}"
+    )
+
 def main() -> None:
     if not BOT_TOKEN:
         raise RuntimeError("Не знайдено BOT_TOKEN. Додай токен у .env або змінну середовища BOT_TOKEN.")
@@ -500,6 +505,7 @@ def main() -> None:
 
     app.add_handler(MessageHandler(filters.Regex(r"^/чистка($|\s)"), clean_stats))
     app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, track_message))
+    app.add_handler(CommandHandler("threadid", thread_id))
 
     print("Bot started...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
