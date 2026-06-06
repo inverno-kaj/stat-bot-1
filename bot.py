@@ -107,7 +107,7 @@ async def track_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         )
 
 
-def build_top(chat_id: int, thread_id: int | None, period: str, limit: int = 10):
+def build_top(chat_id: int, thread_id: int | None, period: str):
     start = period_start(period)
     where = ["chat_id = ?"]
     params: list = [chat_id]
@@ -126,13 +126,10 @@ def build_top(chat_id: int, thread_id: int | None, period: str, limit: int = 10)
         WHERE {' AND '.join(where)}
         GROUP BY user_id
         ORDER BY count DESC
-        LIMIT ?
     """
-    params.append(limit)
 
     with db() as conn:
         return conn.execute(query, params).fetchall()
-
 
 def format_user(row: sqlite3.Row) -> str:
     name = " ".join(filter(None, [row["first_name"], row["last_name"]])).strip()
@@ -151,6 +148,23 @@ def format_top(rows, title: str) -> str:
         lines.append(f"{i}. {format_user(row)} — <b>{row['count']}</b>")
     return "\n".join(lines)
 
+async def send_long_html(message, text: str) -> None:
+    max_len = 3900
+    parts = []
+    current = ""
+
+    for line in text.split("\n"):
+        if len(current) + len(line) + 1 > max_len:
+            parts.append(current)
+            current = line
+        else:
+            current += ("\n" if current else "") + line
+
+    if current:
+        parts.append(current)
+
+    for part in parts:
+        await message.reply_html(part)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     text = (
@@ -177,7 +191,10 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def top_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, period: str) -> None:
     chat = update.effective_chat
     rows = build_top(chat.id, None, period)
-    await update.effective_message.reply_html(format_top(rows, f"Топ активності {period_label(period)} — весь чат"))
+    await send_long_html(
+        update.effective_message,
+        format_top(rows, f"Топ активності {period_label(period)} — {thread_name}")
+    )
 
 
 async def thread_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, period: str) -> None:
@@ -185,7 +202,10 @@ async def thread_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, period:
     thread_id = get_thread_id(update)
     rows = build_top(chat.id, thread_id, period)
     thread_name = "General" if thread_id == 0 else f"гілка #{thread_id}"
-    await update.effective_message.reply_html(format_top(rows, f"Топ активності {period_label(period)} — {thread_name}"))
+    await send_long_html(
+        update.effective_message,
+        format_top(rows, f"Топ активності {period_label(period)} — {thread_name}")
+    )
 
 
 async def me(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
