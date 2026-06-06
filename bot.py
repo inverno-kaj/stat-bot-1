@@ -1,12 +1,15 @@
 import os
 import sqlite3
 import shutil
+import json
+import gspread
 from datetime import datetime, timezone, timedelta
 from html import escape
 from telegram import Update, InputFile
 from telegram.constants import ParseMode
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 from datetime import datetime
+from google.oauth2.service_account import Credentials
 
 DB_PATH = os.getenv("DB_PATH")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -280,7 +283,121 @@ async def backup_db(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     finally:
         if os.path.exists(backup_path):
             os.remove(backup_path)
-            
+
+SPREADSHEET_ID = "1wvNuyiW0d-3imx8hXmEB-gokiScxojGUv7tn4SkdS0o"
+SHEET_NAME = "Реєстр чистки"
+
+def get_sheet():
+    creds_json = os.getenv("GOOGLE_CREDENTIALS_JSON")
+    if not creds_json:
+        raise RuntimeError("Не знайдено GOOGLE_CREDENTIALS_JSON")
+
+    creds_dict = json.loads(creds_json)
+
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive",
+    ]
+
+    creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+    client = gspread.authorize(creds)
+
+    return client.open_by_key(SPREADSHEET_ID).worksheet(SHEET_NAME)
+
+
+def current_sunday():
+    today = datetime.now(LOCAL_TZ).date()
+    return today - timedelta(days=(today.weekday() + 1) % 7)
+
+
+def normalize_name(value):
+    return str(value or "").strip().lower().replace("@", "")
+
+
+def row_user_key(row):
+    # B = ім'я / username у таблиці
+    return normalize_name(row[1] if len(row) > 1 else "")
+
+
+async def clean_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    msg = update.effective_message
+
+    if not msg or not msg.text.startswith("/чистка"):
+        return
+
+    chat = update.effective_chat
+    user = update.effective_user
+
+    cleaner = f"@{user.username}" if user and user.username else user.full_name
+
+    rows = build_top(chat.id, None, "week")
+
+    stats = {}
+    for row in rows:
+        keys = [
+            normalize_name(row["username"]),
+            normalize_name(row["first_name"]),
+            normalize_name(f"{row['first_name'] or ''} {row['last_name'] or ''}"),
+        ]
+
+        for key in keys:
+            if key:
+                stats[key] = row["count"]
+
+    sheet = get_sheet()
+
+    values = sheet.get_all_values()
+    headers = values[0]
+
+    sunday = current_sunday()
+    sunday_text = sunday.strftime("%d.%m.%Y")
+
+    date_col = None
+
+    for i in range(2, len(headers), 2):  # C, E, G...
+        if headers[i] == sunday_text:
+            date_col = i + 1
+            break
+
+    if date_col is None:
+        date_col = len(headers) + 1
+        sheet.update_cell(1, date_col, sunday_text)
+        sheet.update_cell(1, date_col + 1, "Хто проводив")
+
+    updates = []
+
+    for row_index, row in enumerate(values[1:], start=2):
+        name_key = row_user_key(row)
+
+        # B = N/A — пропускаємо
+        if name_key == "n/a":
+            continue
+
+        # N не 0 — пропускаємо
+        n_value = row[13] if len(row) > 13 else ""
+        if str(n_value).strip() not in ("", "0"):
+            continue
+
+        count = stats.get(name_key, 0)
+
+        updates.append({
+            "range": gspread.utils.rowcol_to_a1(row_index, date_col),
+            "values": [[count]],
+        })
+
+        updates.append({
+            "range": gspread.utils.rowcol_to_a1(row_index, date_col + 1),
+            "values": [[cleaner]],
+        })
+
+    if updates:
+        sheet.batch_update(updates)
+
+    await msg.reply_text(
+        f"✅ Чистку внесено в таблицю за {sunday_text}\n"
+        f"Провів: {cleaner}"
+    )
+
 def main() -> None:
     if not BOT_TOKEN:
         raise RuntimeError("Не знайдено BOT_TOKEN. Додай токен у .env або змінну середовища BOT_TOKEN.")
@@ -303,6 +420,7 @@ def main() -> None:
     app.add_handler(CommandHandler("thread_month", lambda u, c: thread_cmd(u, c, "month")))
     app.add_handler(CommandHandler("thread_all", lambda u, c: thread_cmd(u, c, "all")))
 
+    app.add_handler(MessageHandler(filters.Regex(r"^/чистка($|\s)"), clean_stats))
     app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, track_message))
 
     print("Bot started...")
