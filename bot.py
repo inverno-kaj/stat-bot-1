@@ -468,6 +468,29 @@ def parse_date(value):
     return None
 
 async def clean_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat = update.effective_chat
+    user = update.effective_user
+    cleaner = f"@{user.username}" if user and user.username else user.full_name
+    
+    today = datetime.now(LOCAL_TZ)
+    
+    if today.weekday() != 6:
+        await msg.reply_text("⛔ Команда /чистка доступна тільки в неділю.")
+        return
+    
+    admins_sheet = get_worksheet("Список адмінів")
+    admins_values = admins_sheet.get_all_values()
+    
+    admin_ids = set()
+    
+    for row in admins_values[2:]:
+        if len(row) >= 3 and str(row[2]).strip().isdigit():
+            admin_ids.add(int(str(row[2]).strip()))
+    
+    if not user or user.id not in admin_ids:
+        await msg.reply_text("⛔ У тебе немає доступу до команди /чистка.")
+        return
+
     msg = update.effective_message
 
     if not msg or not msg.text.startswith("/чистка"):
