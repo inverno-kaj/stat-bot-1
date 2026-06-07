@@ -468,6 +468,10 @@ def parse_date(value):
     return None
 
 async def clean_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    msg = update.effective_message
+    if not msg or not msg.text.startswith("/чистка"):
+        return
+
     chat = update.effective_chat
     user = update.effective_user
     cleaner = f"@{user.username}" if user and user.username else user.full_name
@@ -490,8 +494,6 @@ async def clean_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     if not user or user.id not in admin_ids:
         await msg.reply_text("⛔ У тебе немає доступу до команди /чистка.")
         return
-
-    msg = update.effective_message
 
     if not msg or not msg.text.startswith("/чистка"):
         return
