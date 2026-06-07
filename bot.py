@@ -487,7 +487,11 @@ async def clean_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     today = datetime.now(LOCAL_TZ)
     
     if today.weekday() != 6:
-        await msg.reply_text("⛔ Команда /чистка доступна тільки в неділю.")
+        await context.bot.send_message(
+            chat_id=chat.id,
+            message_thread_id=msg.message_thread_id if msg.message_thread_id else None,
+            text="⛔ Команда /чистка доступна тільки в неділю."
+        )
         return
     
     admins_sheet = get_worksheet("Список адмінів")
@@ -500,7 +504,11 @@ async def clean_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             admin_ids.add(int(str(row[2]).strip()))
     
     if not user or user.id not in admin_ids:
-        await msg.reply_text("⛔ У тебе немає доступу до команди /чистка.")
+        await context.bot.send_message(
+            chat_id=chat.id,
+            message_thread_id=msg.message_thread_id if msg.message_thread_id else None,
+            text="⛔ У тебе немає доступу до команди."
+        )
         return
 
     if not msg or not msg.text.startswith("/чистка"):
@@ -610,11 +618,15 @@ async def clean_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
     color_clean_registry(registry_sheet, members_sheet, get_worksheet("Реєстр рестів"))
 
-    await msg.reply_text(
-        f"✅ Чистку внесено за {sunday_text}\n"
-        f"Заповнено: {filled}\n"
-        f"Пропущено: {skipped}\n"
-        f"Провів: {cleaner}"
+    await context.bot.send_message(
+        chat_id=chat.id,
+        message_thread_id=msg.message_thread_id if msg.message_thread_id else None,
+        text=(
+            f"✅ Чистку внесено за {sunday_text}\n"
+            f"Заповнено: {filled}\n"
+            f"Пропущено: {skipped}\n"
+            f"Провів: {cleaner}"
+        )
     )
 
 async def thread_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
