@@ -360,6 +360,102 @@ def get_week_count_for_user(chat_id, user_id, thread_ids):
 
     return row["count"] if row else 0
 
+def color_clean_registry(registry_sheet, members_sheet, rests_sheet):
+    registry_values = registry_sheet.get_all_values()
+    member_values = members_sheet.get_all_values()
+    rest_values = rests_sheet.get_all_values()
+
+    last_row = len(registry_values)
+    last_col = len(registry_values[0])
+
+    rest_map = {}
+    join_date_map = {}
+
+    # Реєстр рестів: B = персонаж, H = дата ресту
+    for row in rest_values[1:]:
+        if len(row) >= 8:
+            character = str(row[1]).strip()
+            rest_date = parse_date(row[7])
+            if character and rest_date:
+                rest_map[character] = rest_date
+
+    # Список учасників: C = персонаж, G = дата приєднання
+    for row in member_values[1:]:
+        if len(row) >= 7:
+            character = str(row[2]).strip()
+            join_date = parse_date(row[6])
+            if character and join_date:
+                join_date_map[character] = join_date
+
+    backgrounds = registry_sheet.range(2, 3, last_row, last_col)
+
+    cells_to_update = []
+
+    for cell in backgrounds:
+        row = cell.row
+        col = cell.col
+
+        # фарбуємо тільки колонки дат: C, E, G...
+        if (col - 3) % 2 != 0:
+            continue
+
+        character = registry_values[row - 1][1]
+        date_header = parse_date(registry_values[0][col - 1])
+        messages = registry_values[row - 1][col - 1]
+
+        if not date_header or messages == "":
+            cell.color = None
+            cells_to_update.append(cell)
+            continue
+
+        rest_date = rest_map.get(character)
+        join_date = join_date_map.get(character)
+
+        color = None
+
+        # Сірий
+        if join_date:
+            diff_days = (date_header - join_date).days
+            if 0 <= diff_days <= 7:
+                color = (0.85, 0.85, 0.85)
+
+        # Блакитний
+        if color is None and rest_date and rest_date < date_header:
+            color = (0.81, 0.89, 0.95)
+
+        # Червоний / зелений
+        if color is None and not rest_date:
+            try:
+                msg_count = int(messages)
+                if msg_count < 85:
+                    color = (0.92, 0.60, 0.60)
+                else:
+                    color = (0.58, 0.77, 0.49)
+            except:
+                color = None
+
+        cell.color = color
+        cells_to_update.append(cell)
+
+    if cells_to_update:
+        registry_sheet.update_cells(cells_to_update)
+
+def parse_date(value):
+    if not value:
+        return None
+
+    if isinstance(value, datetime):
+        return value.date()
+
+    value = str(value).strip()
+
+    for fmt in ("%d.%m.%Y", "%Y-%m-%d", "%d/%m/%Y"):
+        try:
+            return datetime.strptime(value, fmt).date()
+        except ValueError:
+            pass
+
+    return None
 
 async def clean_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     msg = update.effective_message
@@ -468,6 +564,8 @@ async def clean_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
     if updates:
         registry_sheet.batch_update(updates)
+
+    color_clean_registry(registry_sheet, members_sheet, get_worksheet("Реєстр рестів"))
 
     await msg.reply_text(
         f"✅ Чистку внесено за {sunday_text}\n"
