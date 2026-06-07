@@ -371,92 +371,92 @@ def color_clean_registry(registry_sheet, members_sheet, rests_sheet):
     rest_map = {}
     join_date_map = {}
 
-# Реєстр рестів:
-# B = персонаж, D = дата початку, E = дата кінця, H = статус
-for row in rest_values[1:]:
-    if len(row) >= 8:
-        character = str(row[1]).strip()
-        start_date = parse_date(row[3])
-        end_date = parse_date(row[4])
-        status = str(row[7]).strip()
-
-        if character and start_date and end_date and status == "Дійсний":
-            rest_map[character] = {
-                "start": start_date,
-                "end": end_date
-            }
-
-    # Список учасників: C = персонаж, G = дата приєднання
-    for row in member_values[1:]:
-        if len(row) >= 7:
-            character = str(row[2]).strip()
-            join_date = parse_date(row[6])
-            if character and join_date:
-                join_date_map[character] = join_date
-
-    requests = []
-
-    for row_index in range(2, last_row + 1):
-        character = str(registry_values[row_index - 1][1]).strip()
-
-        for col_index in range(3, last_col + 1, 2):  # C, E, G...
-            date_header = parse_date(registry_values[0][col_index - 1])
-            messages = registry_values[row_index - 1][col_index - 1]
-
-            color = None
-
-            if date_header and messages != "":
-                rest_info = rest_map.get(character)
-                join_date = join_date_map.get(character)
-
-                # 4. Сірий
-                if join_date:
-                    diff_days = (date_header - join_date).days
-                    if 0 <= diff_days <= 7:
-                        color = {"red": 0.85, "green": 0.85, "blue": 0.85}
-
-                # 1. Блакитний
-                if color is None and rest_info:
-                    if rest_info["start"] <= date_header <= rest_info["end"]:
-                        color = {"red": 0.81, "green": 0.89, "blue": 0.95}
-
-                # 2-3. Червоний / зелений
-                if color is None and not rest_info:
-                    try:
-                        msg_count = int(messages)
-                        if msg_count < 85:
-                            color = {"red": 0.92, "green": 0.60, "blue": 0.60}
-                        else:
-                            color = {"red": 0.58, "green": 0.77, "blue": 0.49}
-                    except ValueError:
-                        color = None
-
-            requests.append({
-                "repeatCell": {
-                    "range": {
-                        "sheetId": registry_sheet.id,
-                        "startRowIndex": row_index - 1,
-                        "endRowIndex": row_index,
-                        "startColumnIndex": col_index - 1,
-                        "endColumnIndex": col_index
-                    },
-                    "cell": {
-                        "userEnteredFormat": {
-                            "backgroundColor": color if color else {
-                                "red": 1,
-                                "green": 1,
-                                "blue": 1
-                            }
-                        }
-                    },
-                    "fields": "userEnteredFormat.backgroundColor"
+    # Реєстр рестів:
+    # B = персонаж, D = дата початку, E = дата кінця, H = статус
+    for row in rest_values[1:]:
+        if len(row) >= 8:
+            character = str(row[1]).strip()
+            start_date = parse_date(row[3])
+            end_date = parse_date(row[4])
+            status = str(row[7]).strip()
+    
+            if character and start_date and end_date and status == "Дійсний":
+                rest_map[character] = {
+                    "start": start_date,
+                    "end": end_date
                 }
+    
+        # Список учасників: C = персонаж, G = дата приєднання
+        for row in member_values[1:]:
+            if len(row) >= 7:
+                character = str(row[2]).strip()
+                join_date = parse_date(row[6])
+                if character and join_date:
+                    join_date_map[character] = join_date
+    
+        requests = []
+    
+        for row_index in range(2, last_row + 1):
+            character = str(registry_values[row_index - 1][1]).strip()
+    
+            for col_index in range(3, last_col + 1, 2):  # C, E, G...
+                date_header = parse_date(registry_values[0][col_index - 1])
+                messages = registry_values[row_index - 1][col_index - 1]
+    
+                color = None
+    
+                if date_header and messages != "":
+                    rest_info = rest_map.get(character)
+                    join_date = join_date_map.get(character)
+    
+                    # 4. Сірий
+                    if join_date:
+                        diff_days = (date_header - join_date).days
+                        if 0 <= diff_days <= 7:
+                            color = {"red": 0.85, "green": 0.85, "blue": 0.85}
+    
+                    # 1. Блакитний
+                    if color is None and rest_info:
+                        if rest_info["start"] <= date_header <= rest_info["end"]:
+                            color = {"red": 0.81, "green": 0.89, "blue": 0.95}
+    
+                    # 2-3. Червоний / зелений
+                    if color is None and not rest_info:
+                        try:
+                            msg_count = int(messages)
+                            if msg_count < 85:
+                                color = {"red": 0.92, "green": 0.60, "blue": 0.60}
+                            else:
+                                color = {"red": 0.58, "green": 0.77, "blue": 0.49}
+                        except ValueError:
+                            color = None
+    
+                requests.append({
+                    "repeatCell": {
+                        "range": {
+                            "sheetId": registry_sheet.id,
+                            "startRowIndex": row_index - 1,
+                            "endRowIndex": row_index,
+                            "startColumnIndex": col_index - 1,
+                            "endColumnIndex": col_index
+                        },
+                        "cell": {
+                            "userEnteredFormat": {
+                                "backgroundColor": color if color else {
+                                    "red": 1,
+                                    "green": 1,
+                                    "blue": 1
+                                }
+                            }
+                        },
+                        "fields": "userEnteredFormat.backgroundColor"
+                    }
+                })
+    
+        if requests:
+            registry_sheet.spreadsheet.batch_update({
+                "requests": requests
             })
-
-    if requests:
-        registry_sheet.spreadsheet.batch_update({
-            "requests": requests
-        })
 
 def parse_date(value):
     if not value:
