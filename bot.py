@@ -371,13 +371,20 @@ def color_clean_registry(registry_sheet, members_sheet, rests_sheet):
     rest_map = {}
     join_date_map = {}
 
-    # Реєстр рестів: B = персонаж, H = дата ресту
-    for row in rest_values[1:]:
-        if len(row) >= 8:
-            character = str(row[1]).strip()
-            rest_date = parse_date(row[7])
-            if character and rest_date:
-                rest_map[character] = rest_date
+# Реєстр рестів:
+# B = персонаж, D = дата початку, E = дата кінця, H = статус
+for row in rest_values[1:]:
+    if len(row) >= 8:
+        character = str(row[1]).strip()
+        start_date = parse_date(row[3])
+        end_date = parse_date(row[4])
+        status = str(row[7]).strip()
+
+        if character and start_date and end_date and status == "Дійсний":
+            rest_map[character] = {
+                "start": start_date,
+                "end": end_date
+            }
 
     # Список учасників: C = персонаж, G = дата приєднання
     for row in member_values[1:]:
@@ -399,7 +406,7 @@ def color_clean_registry(registry_sheet, members_sheet, rests_sheet):
             color = None
 
             if date_header and messages != "":
-                rest_date = rest_map.get(character)
+                rest_info = rest_map.get(character)
                 join_date = join_date_map.get(character)
 
                 # 4. Сірий
@@ -409,11 +416,12 @@ def color_clean_registry(registry_sheet, members_sheet, rests_sheet):
                         color = {"red": 0.85, "green": 0.85, "blue": 0.85}
 
                 # 1. Блакитний
-                if color is None and rest_date and rest_date < date_header:
-                    color = {"red": 0.81, "green": 0.89, "blue": 0.95}
+                if color is None and rest_info:
+                    if rest_info["start"] <= date_header <= rest_info["end"]:
+                        color = {"red": 0.81, "green": 0.89, "blue": 0.95}
 
                 # 2-3. Червоний / зелений
-                if color is None and not rest_date:
+                if color is None and not rest_info:
                     try:
                         msg_count = int(messages)
                         if msg_count < 85:
