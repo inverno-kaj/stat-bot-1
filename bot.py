@@ -387,58 +387,68 @@ def color_clean_registry(registry_sheet, members_sheet, rests_sheet):
             if character and join_date:
                 join_date_map[character] = join_date
 
-    backgrounds = registry_sheet.range(2, 3, last_row, last_col)
+    requests = []
 
-    cells_to_update = []
+    for row_index in range(2, last_row + 1):
+        character = str(registry_values[row_index - 1][1]).strip()
 
-    for cell in backgrounds:
-        row = cell.row
-        col = cell.col
+        for col_index in range(3, last_col + 1, 2):  # C, E, G...
+            date_header = parse_date(registry_values[0][col_index - 1])
+            messages = registry_values[row_index - 1][col_index - 1]
 
-        # фарбуємо тільки колонки дат: C, E, G...
-        if (col - 3) % 2 != 0:
-            continue
+            color = None
 
-        character = registry_values[row - 1][1]
-        date_header = parse_date(registry_values[0][col - 1])
-        messages = registry_values[row - 1][col - 1]
+            if date_header and messages != "":
+                rest_date = rest_map.get(character)
+                join_date = join_date_map.get(character)
 
-        if not date_header or messages == "":
-            cell.color = None
-            cells_to_update.append(cell)
-            continue
+                # 4. Сірий
+                if join_date:
+                    diff_days = (date_header - join_date).days
+                    if 0 <= diff_days <= 7:
+                        color = {"red": 0.85, "green": 0.85, "blue": 0.85}
 
-        rest_date = rest_map.get(character)
-        join_date = join_date_map.get(character)
+                # 1. Блакитний
+                if color is None and rest_date and rest_date < date_header:
+                    color = {"red": 0.81, "green": 0.89, "blue": 0.95}
 
-        color = None
+                # 2-3. Червоний / зелений
+                if color is None and not rest_date:
+                    try:
+                        msg_count = int(messages)
+                        if msg_count < 85:
+                            color = {"red": 0.92, "green": 0.60, "blue": 0.60}
+                        else:
+                            color = {"red": 0.58, "green": 0.77, "blue": 0.49}
+                    except ValueError:
+                        color = None
 
-        # Сірий
-        if join_date:
-            diff_days = (date_header - join_date).days
-            if 0 <= diff_days <= 7:
-                color = (0.85, 0.85, 0.85)
+            requests.append({
+                "repeatCell": {
+                    "range": {
+                        "sheetId": registry_sheet.id,
+                        "startRowIndex": row_index - 1,
+                        "endRowIndex": row_index,
+                        "startColumnIndex": col_index - 1,
+                        "endColumnIndex": col_index
+                    },
+                    "cell": {
+                        "userEnteredFormat": {
+                            "backgroundColor": color if color else {
+                                "red": 1,
+                                "green": 1,
+                                "blue": 1
+                            }
+                        }
+                    },
+                    "fields": "userEnteredFormat.backgroundColor"
+                }
+            })
 
-        # Блакитний
-        if color is None and rest_date and rest_date < date_header:
-            color = (0.81, 0.89, 0.95)
-
-        # Червоний / зелений
-        if color is None and not rest_date:
-            try:
-                msg_count = int(messages)
-                if msg_count < 85:
-                    color = (0.92, 0.60, 0.60)
-                else:
-                    color = (0.58, 0.77, 0.49)
-            except:
-                color = None
-
-        cell.color = color
-        cells_to_update.append(cell)
-
-    if cells_to_update:
-        registry_sheet.update_cells(cells_to_update)
+    if requests:
+        registry_sheet.spreadsheet.batch_update({
+            "requests": requests
+        })
 
 def parse_date(value):
     if not value:
